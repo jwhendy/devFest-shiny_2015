@@ -1,0 +1,120 @@
+The code
+===
+
+This `shiny` example illustrates the idea of interactive data exploration. For background on the public transportation dataset used, see this [github repository](https://github.com/tcrug/public-transpo). User inputs reactively set the variables to be used by `ggplot()` for the x and y axes as well as, optionally, color and size. In addition, the user is able to apply transformations (`log()` and `sqrt()`) to the axis and size variables.
+
+**ui.R**
+
+```{r}
+library(shiny)
+library(markdown)
+
+shinyUI(pageWithSidebar(
+  # title
+  headerPanel("Transportation exploration"),
+  
+  sidebarPanel(
+    
+    selectInput(inputId = "x",
+                label = "Select x-axis variable", 
+                list("Population" = "population", "Service area" = "service_area_sq_mi",
+                     "VOMS" = "voms", "Annual miles" = "annual_vehicle_miles",
+                     "Vechicle hours" = "annual_vehicle_hours", "Unlinked trips" = "unlinked_passngr_trips",
+                     "Passenger miles" = "passenger_miles", "Total BTUs" = "btus_total",
+                     "BTUs/passenger-mile" = "btus_pmile", "Ave. occupancy" = "average_occupancy")),
+    
+    selectInput(inputId = "y",
+                label = "Select y-axis variable", 
+                list("Population" = "population", "Service area" = "service_area_sq_mi",
+                     "VOMS" = "voms", "Annual miles" = "annual_vehicle_miles",
+                     "Vechicle hours" = "annual_vehicle_hours", "Unlinked trips" = "unlinked_passngr_trips",
+                     "Passenger miles" = "passenger_miles", "Total BTUs" = "btus_total",
+                     "BTUs/passenger-mile" = "btus_pmile", "Ave. occupancy" = "average_occupancy")),
+    
+    selectInput(inputId = "color",
+                label = "Select color variable", 
+                list("None" = "none", "City" = "city", "State" = "state", "Org" = "org_type",
+                "Mode" = "mode", "Service" = "service", "Energy type" = "primary_energy")),
+    
+    selectInput(inputId = "size",
+                label = "Select size variable", 
+                list("None" = "none", "Population" = "population", "Service area" = "service_area_sq_mi",
+                     "VOMS" = "voms", "Annual miles" = "annual_vehicle_miles",
+                     "Vechicle hours" = "annual_vehicle_hours", "Unlinked trips" = "unlinked_passngr_trips",
+                     "Passenger miles" = "passenger_miles", "Total BTUs" = "btus_total",
+                     "BTUs/passenger-mile" = "btus_pmile", "Ave. occupancy" = "average_occupancy")),
+    
+    selectInput(inputId = "x_trans", label = "x variable transformation",
+                list("None" = "identity", "log" = "log", "sqrt" = "sqrt")),
+    
+    selectInput(inputId = "y_trans", label = "y variable transformation",
+                list("None" = "identity", "log" = "log", "sqrt" = "sqrt")),
+    
+    selectInput(inputId = "size_trans", label = "Size variable transformation",
+                list("None" = "identity", "log" = "log", "sqrt" = "sqrt"))
+  ),
+  
+  mainPanel(
+    tabsetPanel(
+      tabPanel("Plot",
+               plotOutput("plot", width = "100%", height = "600px")),
+      tabPanel("Code",
+               includeMarkdown("./code.Rmd"))
+  )
+)))
+```
+
+**server.R**
+  
+```{r}
+library(shiny)
+library(ggplot2)
+
+data <- read.csv("public-transpo.csv")
+
+# need a color to use when none is chosen
+data$none <- rep("", nrow(data))
+
+shinyServer(function(input, output) {
+    
+  output$plot <- renderPlot({
+    
+    # initialize ggplot; aes_string is necessary since I don't know how to 
+    # pass objects from the input object. Instead, intpu$var returns a string
+    # so we use the handy aes_string() method instead of regular 'ol aes()
+    p <- ggplot(data, aes_string(x = input$x, y = input$y))
+    
+    # there were issues using range(min, max) in scale_size below, so I opted to
+    # just run a check to see if no size variable had been selected.
+    # If not, we just use a constant value.
+    if(input$size == "none") {
+      p <- p + geom_point(aes_string(colour = input$color), size = 4)
+    }
+    
+    # if size is not "none", add the aesthetic
+    else {
+      p <- p + geom_point(aes_string(size = input$size,
+                                     colour = paste0("as.factor(", input$color, ")")))
+    }
+    
+    # ggplot takes trings for transformations, so we can handily just pass
+    # the appropriate name right to the scale!
+    p <- p + scale_x_continuous(trans = input$x_trans)
+    p <- p + scale_y_continuous(trans = input$y_trans)
+    
+    # the range() option is nice so we can make sure the min and max bubble
+    # sizes are reasonable. We can also apply a transformation here.
+    p <- p + scale_size_continuous(input$size,
+                                   trans = input$size_trans, range = c(5, 25))
+    
+    # just unifying the color name so we don't get as.factor()
+    p <- p + scale_colour_discrete(input$color)
+    
+    # some theme options to pretty things up and make it more readable
+    p <- p + theme_bw() + theme(text = element_text(size = 18))
+    
+    print(p)
+    
+  })
+})
+```
